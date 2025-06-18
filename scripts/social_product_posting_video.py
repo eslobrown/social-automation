@@ -232,13 +232,14 @@ def get_random_product():
                     p.post_content as Content,
                     p.post_excerpt as Short_Description,
                     p.guid as Base_URL,
-                    sku.meta_value as SKU,
-                    stock.meta_value as Stock_Status,
+                    MAX(CASE WHEN sku.meta_key = '_sku' THEN sku.meta_value END) as SKU,
+                    MAX(CASE WHEN stock.meta_key = '_stock_status' THEN stock.meta_value END) as Stock_Status,
                     p.post_status as Status,
                     GROUP_CONCAT(DISTINCT terms.name SEPARATOR ', ') as Product_Categories,
-                    (SELECT guid FROM wp_posts WHERE ID = thumb.meta_value) as thumbnail,
-                    GROUP_CONCAT(DISTINCT gallery.meta_value) as gallery_ids
-                FROM wp_posts p
+                    (SELECT guid FROM wp_posts WHERE ID = MAX(CASE WHEN thumb.meta_key = '_thumbnail_id' THEN thumb.meta_value END)) as thumbnail,
+                    GROUP_CONCAT(DISTINCT CASE WHEN gallery.meta_key = '_product_image_gallery' THEN gallery.meta_value END) as gallery_ids
+                FROM random_product rp
+                JOIN wp_posts p ON rp.ID = p.ID
                 LEFT JOIN wp_postmeta stock ON p.ID = stock.post_id
                     AND stock.meta_key = '_stock_status'
                 LEFT JOIN wp_postmeta sku ON p.ID = sku.post_id
@@ -251,14 +252,7 @@ def get_random_product():
                 LEFT JOIN wp_term_taxonomy tt ON tr.term_taxonomy_id = tt.term_taxonomy_id
                     AND tt.taxonomy = 'product_cat'
                 LEFT JOIN wp_terms terms ON tt.term_id = terms.term_id
-                WHERE p.post_type = 'product'
-                    AND p.post_status = 'publish'
-                    AND p.ID NOT IN (
-                        SELECT ID
-                        FROM posted_products_blacklist
-                        WHERE Timestamp > DATE_SUB(NOW(), INTERVAL 14 DAY)
-                    )
-                GROUP BY p.ID
+                GROUP BY p.ID, p.post_title, p.post_content, p.post_excerpt, p.guid, p.post_status
                 ORDER BY RAND()
                 LIMIT 1;
                 """
