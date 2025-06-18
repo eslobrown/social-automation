@@ -455,7 +455,7 @@ def get_random_product(db_config):
                     AND p.ID NOT IN (
                         SELECT ID 
                         FROM posted_products_blacklist 
-                        WHERE posted_date > DATE_SUB(NOW(), INTERVAL 7 DAY)
+                        WHERE Timestamp > DATE_SUB(NOW(), INTERVAL 7 DAY)
                     )
                     ORDER BY RAND()
                     LIMIT 1
@@ -499,21 +499,7 @@ def add_to_blacklist(product_id, db_config):
             database=db_config.name
         ) as connection:
             with connection.cursor() as cursor:
-                # First, check if the table exists and has the correct columns
-                try:
-                    cursor.execute("""
-                        CREATE TABLE IF NOT EXISTS posted_products_blacklist (
-                            ID bigint(20) NOT NULL,
-                            posted_date timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                            PRIMARY KEY (ID)
-                        )
-                    """)
-                    connection.commit()
-                except mysql.connector.Error as e:
-                    logger.error(f"Error creating/checking blacklist table: {e}")
-                    return False
-
-                # Now insert the product
+                # The table already exists, so we just need to insert
                 query = """
                     INSERT INTO posted_products_blacklist (ID) 
                     VALUES (%s)
