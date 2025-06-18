@@ -455,7 +455,7 @@ def get_random_product(db_config):
                     AND p.ID NOT IN (
                         SELECT ID 
                         FROM posted_products_blacklist 
-                        WHERE post_date > DATE_SUB(NOW(), INTERVAL 7 DAY)
+                        WHERE posted_date > DATE_SUB(NOW(), INTERVAL 7 DAY)
                     )
                     ORDER BY RAND()
                     LIMIT 1
@@ -471,7 +471,7 @@ def get_random_product(db_config):
                     MAX(CASE WHEN pm.meta_key = '_thumbnail_id' THEN pm.meta_value END) as Thumbnail_ID,
                     GROUP_CONCAT(DISTINCT terms.name SEPARATOR ', ') as Product_Categories,
                     p.post_status as Status,
-                    (SELECT guid FROM wp_posts WHERE ID = thumbnail.meta_value) as Image_URLs
+                    (SELECT guid FROM wp_posts WHERE ID = MAX(CASE WHEN thumbnail.meta_key = '_thumbnail_id' THEN thumbnail.meta_value END)) as Image_URLs
                 FROM wp_posts p
                 JOIN random_product rp ON p.ID = rp.ID
                 JOIN wp_postmeta pm ON p.ID = pm.post_id
@@ -482,7 +482,7 @@ def get_random_product(db_config):
                     AND tt.taxonomy = 'product_cat'
                 LEFT JOIN wp_terms terms ON tt.term_id = terms.term_id
                 WHERE pm.meta_key IN ('_sku', '_stock_status', '_thumbnail_id')
-                GROUP BY p.ID
+                GROUP BY p.ID, p.post_title, p.post_content, p.post_excerpt, p.guid, p.post_status
                 """
                 cursor.execute(query)
                 return cursor.fetchone()
@@ -535,11 +535,11 @@ def is_product_blacklisted(product_id, db_config):
             database=db_config.name
         ) as connection:
             with connection.cursor() as cursor:
-                query = "SELECT COUNT(*) FROM posted_products_blacklist WHERE product_id = %s"
+                query = "SELECT COUNT(*) FROM posted_products_blacklist WHERE ID = %s"
                 cursor.execute(query, (product_id,))
                 count = cursor.fetchone()[0]
                 return count > 0
-    except Error as e:
+    except mysql.connector.Error as e:
         logger.error(f"Error checking product blacklist: {e}")
         return False
 
