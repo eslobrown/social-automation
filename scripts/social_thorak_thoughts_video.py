@@ -1279,26 +1279,26 @@ def refresh_tiktok_token():
        return False
 
 def shorten_url(long_url):
-   headers = {
-       "Authorization": f"Bearer {BITLY_API_KEY}",
-       "Content-Type": "application/json",
-   }
-   data = {"long_url": long_url}
-   try:
-       response = requests.post(
-           "https://api-ssl.bitly.com/v4/shorten", headers=headers, json=data, timeout=30
-       )
-       response_data = response.json()
-       if response.status_code == 200:
-           short_url = response_data["link"]
-           logger.info(f"Shortened URL: {short_url}")
-           return short_url
-       else:
-           logger.error(f"Bitly failed to shorten URL {long_url}: {response_data}")
-           return long_url  # Return the original URL if Bitly fails
-   except Exception as e:
-       logger.error(f"Exception occurred while shortening URL {long_url}: {str(e)}")
-       return long_url  # Return the original URL if an exception occurs
+    headers = {
+        "Authorization": f"Bearer {BITLY_API_KEY}",
+        "Content-Type": "application/json",
+    }
+    data = {"long_url": long_url}
+    try:
+        response = requests.post(
+            "https://api-ssl.bitly.com/v4/shorten", headers=headers, json=data, timeout=30
+        )
+        response_data = response.json()
+        if response.status_code == 200 or response.status_code == 201:  # Both are success
+            short_url = response_data["link"]
+            logger.info(f"Successfully shortened URL: {long_url} -> {short_url}")
+            return short_url
+        else:
+            logger.error(f"Bitly failed to shorten URL {long_url}: {response_data}")
+            return long_url
+    except Exception as e:
+        logger.error(f"Exception occurred while shortening URL {long_url}: {str(e)}")
+        return long_url
 
 def validate_tiktok_token():
    """
@@ -1666,6 +1666,53 @@ def poll_tiktok_status_until_inbox(publish_id, max_retries=10, retry_delay=30):
            time.sleep(retry_delay)
    return False
 
+def delete_remote_file(remote_path, host, username, password):
+    """Delete file from remote server via SFTP"""
+    try:
+        transport = paramiko.Transport((host, 22))
+        transport.connect(username=username, password=password)
+        sftp = paramiko.SFTPClient.from_transport(transport)
+        sftp.remove(remote_path)
+        sftp.close()
+        transport.close()
+        logger.info(f"Successfully deleted remote file: {remote_path}")
+    except Exception as e:
+        logger.warning(f"Failed to delete remote file {remote_path}: {e}")
+
+def post_to_all_platforms_with_cleanup(video_path, formatted_caption, caption, short_video_url, remote_video_path, sftp_host, sftp_username, sftp_password, page_id, FB_ACCESS_TOKEN):
+    """Post to all platforms and cleanup files"""
+    
+    # Post to Facebook
+    facebook_success = post_to_facebook(formatted_caption, short_video_url, page_id, FB_ACCESS_TOKEN)
+    print("Posted to Facebook!" if facebook_success else "Failed to post to Facebook.")
+
+    # Post to Instagram  
+    instagram_success = post_to_instagram(formatted_caption, short_video_url)
+    print("Posted to Instagram!" if instagram_success else "Failed to post to Instagram.")
+
+    # Twitter posting (uses local file)
+    twitter_caption = trim_to_full_sentence(caption, 280 - len("# Thorak Thought # "))
+    twitter_caption = f"# Thorak Thought # {twitter_caption}"
+    twitter_success = twitter_post_with_media(twitter_caption, video_path)
+    print("Posted to Twitter!" if twitter_success else "Failed to post to Twitter.")
+
+    # TikTok posting (uses local file)
+    logger.info("Posting to TikTok")
+    tiktok_success = post_to_tiktok(video_path)
+    print("Posted to TikTok!" if tiktok_success else "Failed to post to TikTok.")
+
+    # Wait a bit for platforms to download the video
+    logger.info("Waiting 60 seconds for platforms to process video...")
+    time.sleep(60)
+
+    # Cleanup remote file
+    try:
+        delete_remote_file(remote_video_path, sftp_host, sftp_username, sftp_password)
+    except Exception as e:
+        logger.warning(f"Could not delete remote video file: {e}")
+
+    return facebook_success, instagram_success, twitter_success, tiktok_success
+
 if __name__ == "__main__":
    start_time = time.time()
     
@@ -1773,24 +1820,19 @@ if __name__ == "__main__":
        # Shorten the hosted URL using Bitly
        short_video_url = shorten_url(hosted_video_url)
 
-       # Post to Facebook with the video URL from your server
-       facebook_success = post_to_facebook(formatted_caption, short_video_url, page_id, FB_ACCESS_TOKEN)
-       print("Posted to Facebook!" if facebook_success else "Failed to post to Facebook.")
-
-       # Post to Instagram
-       instagram_success = post_to_instagram(formatted_caption, short_video_url)
-       print("Posted to Instagram!" if instagram_success else "Failed to post to Instagram.")
-
-       # Twitter posting
-       twitter_caption = trim_to_full_sentence(caption, 280 - len("# Thorak Thought # "))
-       twitter_caption = f"# Thorak Thought # {twitter_caption}"
-       twitter_success = twitter_post_with_media(twitter_caption, video_path)
-       print("Posted to Twitter!" if twitter_success else "Failed to post to Twitter.")
-
-       # TikTok posting
-       logger.info("Posting to TikTok")
-       tiktok_success = post_to_tiktok(video_path)
-       print("Posted to TikTok!" if tiktok_success else "Failed to post to TikTok.")
+       # Post to all platforms and cleanup remote video
+       facebook_success, instagram_success, twitter_success, tiktok_success = post_to_all_platforms_with_cleanup(
+           video_path, 
+           formatted_caption, 
+           caption, 
+           short_video_url, 
+           remote_video_path, 
+           sftp_host, 
+           sftp_username, 
+           sftp_password, 
+           page_id, 
+           FB_ACCESS_TOKEN
+       )
 
    except ValueError as ve:
        logger.error(f"Validation error: {ve}")
