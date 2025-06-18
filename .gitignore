@@ -1,0 +1,32 @@
+# Virtual Environment
+venv/
+
+# Logs
+logs/*.log
+
+# Temporary files
+temp/*
+
+# Environment variables
+credentials.env
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+
+# Data files that might contain sensitive info
+data/tiktok_tokens.json
+data/song_history.csv
+
+# Large media files (optional - decide based on your needs)
+assets/sounds/*.mp3
+assets/sounds/*.wav

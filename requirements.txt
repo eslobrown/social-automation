@@ -1,0 +1,21 @@
+# Core dependencies
+requests
+python-dotenv
+
+# Social Media APIs
+requests-oauthlib
+
+# Media Processing
+moviepy
+Pillow
+numpy
+
+# File Transfer & System
+paramiko
+
+# Utilities
+pytz
+fonttools
+
+# Email
+# (using standard library smtplib)
