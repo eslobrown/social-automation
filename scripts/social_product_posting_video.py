@@ -33,9 +33,6 @@ from functools import wraps
 from datetime import datetime, timedelta
 import pytz
 from dotenv import load_dotenv
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-import smtplib
 from requests_oauthlib import OAuth1, OAuth2Session
 import uuid
 from PIL import Image, ImageDraw, ImageFont
@@ -59,6 +56,10 @@ os.chdir(project_root)
 # Load environment variables
 dotenv_path = os.path.join(project_root, "credentials.env")
 load_dotenv(dotenv_path)
+
+# Import email relay after project_root is defined
+sys.path.insert(0, project_root)
+from email_relay import send_email_notification
 
 # Set up logging
 log_file_path = os.path.join(project_root, "logs", "social_product_posting_video.log")
@@ -150,11 +151,6 @@ if not all([DB_HOST, DB_USER, DB_PASSWORD, DB_NAME]):
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 FB_ACCESS_TOKEN = quote(os.getenv("FB_ACCESS_TOKEN"))
 BITLY_API_KEY = os.getenv("BITLY_API_KEY")
-SENDER_EMAIL = os.getenv("SENDER_EMAIL")
-SENDER_PASSWORD = os.getenv("SENDER_PASSWORD")
-SMTP_SERVER = os.getenv("SMTP_SERVER")
-SMTP_PORT = int(os.getenv("SMTP_PORT", 587))  # Changed from 465 to 587
-RECIPIENT_EMAIL = os.getenv("RECIPIENT_EMAIL")
 INSTAGRAM_BUSINESS_ACCOUNT_ID = os.getenv("INSTAGRAM_BUSINESS_ACCOUNT_ID")
 TWITTER_API_KEY = os.getenv("TWITTER_API_KEY")
 TWITTER_API_SECRET = os.getenv("TWITTER_API_SECRET")
@@ -860,36 +856,17 @@ def post_to_tiktok(video_path):
 
 # Function to send email notifications
 def send_email(subject: str, body: str):
-    if not all([SENDER_EMAIL, SENDER_PASSWORD, SMTP_SERVER, SMTP_PORT, RECIPIENT_EMAIL]):
-        logger.error("Email credentials or recipient email is missing. Please check your environment variables.")
-        return
+    """Send status email using the relay"""
+    # Create email body with HTML formatting for line breaks
+    formatted_body = f"""<p><strong>Product Review Social Media Automation Report</strong></p>
+<p>Source Server: Hetzner (5.161.70.26)<br>
+Project: /opt/social-automation</p>
 
-    try:
-        message = MIMEMultipart()
-        message['From'] = SENDER_EMAIL
-        message['To'] = RECIPIENT_EMAIL
-        message['Subject'] = f"Product Review Social Automation - Hetzner: {subject}"
+<p>{body}</p>
 
-        # Enhanced body with architecture info
-        enhanced_body = f"""Product Review Social Media Automation Report
-Source Server: Hetzner (5.161.70.26)
-Project: /opt/social-automation
-
-{body}
-
-Log file: {log_file_path}
-"""
-        message.attach(MIMEText(enhanced_body, 'plain'))
-
-        # Use STARTTLS on port 587 instead of SSL on port 465
-        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=30) as server:
-            server.starttls()  # Enable TLS encryption
-            server.login(SENDER_EMAIL, SENDER_PASSWORD)
-            server.send_message(message)
-
-        logger.info("Email notification sent successfully using SMTP.")
-    except Exception as e:
-        logger.error(f"Failed to send email notification: {str(e)}")
+<p>Log file: {log_file_path}</p>"""
+    
+    return send_email_notification(subject, formatted_body, is_error=False)
 
 def load_song_history():
     if not os.path.exists(SONG_HISTORY_FILE):
