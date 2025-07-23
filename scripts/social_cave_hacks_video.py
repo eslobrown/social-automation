@@ -358,7 +358,16 @@ def update_song_history(song_id, song_history):
 
 def send_notification_email(subject, body):
     """Send email notification using the relay"""
-    return send_email_notification(subject, body, is_error=True)
+    # Format like old notifications
+    formatted_body = f"""Cave Hacks Social Media Automation Report
+Source Server: Hetzner (5.161.70.26)
+Project: /opt/social-automation
+
+{body}
+
+Log file: {log_file_path}"""
+    
+    return send_email_notification(subject, formatted_body, is_error=True)
 
 def load_cave_hack_subjects():
     cave_hack_subjects = {}
@@ -1893,26 +1902,31 @@ def send_email(facebook_status, instagram_status, twitter_status, tiktok_status)
     successful_posts = sum([facebook_status, instagram_status, twitter_status, tiktok_status])
     total_posts = 4
 
-    # Create subject line
+    # Create subject line (without prefixes - relay will add them)
     if successful_posts == total_posts:
         subject = f"Cave Hacks Video Posted - All Successful - {timestamp_str}"
     else:
         subject = f"Cave Hacks Video Posted - {total_posts - successful_posts} Failure(s) - {timestamp_str}"
 
-    # Create email body
-    body = f"""Cave Hacks Video Posting Summary:
+    # Create email body with exact old formatting
+    body = f"""Cave Hacks Social Media Automation Report
+Source Server: Hetzner (5.161.70.26)
+Project: /opt/social-automation
+
+Cave Hacks Video Posting Summary:
 
 Facebook: {"Success" if facebook_status else "Failed"}
 Instagram: {"Success" if instagram_status else "Failed"}
 Twitter: {"Success" if twitter_status else "Failed"}
 TikTok: {"Success" if tiktok_status else "Failed"}
 
-Log file: {log_file_path}
-Source Server: Hetzner (5.161.70.26)
-Project: /opt/social-automation
-"""
+Please check the platforms for any failed postings.
+
+
+Log file: {log_file_path}"""
     
-    return send_email_notification(subject, body)
+    # Send email with is_error=False to avoid error prefixes
+    return send_email_notification(subject, body, is_error=False)
 
 def log_memory_usage(tag=""):
     process = psutil.Process(os.getpid())
