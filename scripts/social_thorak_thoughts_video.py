@@ -28,9 +28,6 @@ from datetime import datetime, timedelta
 import pytz
 from PIL import Image, ImageDraw, ImageFont
 from dotenv import load_dotenv
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
 import random
 import base64
 import paramiko
@@ -49,6 +46,10 @@ os.chdir(project_root)
 # Load environment variables
 dotenv_path = os.path.join(project_root, "credentials.env")
 load_dotenv(dotenv_path)
+
+# Import email relay after project_root is defined
+sys.path.insert(0, project_root)
+from email_relay import send_email_notification
 
 # Set up logging
 log_file_path = os.path.join(project_root, "logs", "thorak_video_creation.log")
@@ -80,11 +81,6 @@ logging.info(f"Log file: {log_file_path}")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 FB_ACCESS_TOKEN = quote(os.getenv("FB_ACCESS_TOKEN"))
 INSTAGRAM_BUSINESS_ACCOUNT_ID = os.getenv("INSTAGRAM_BUSINESS_ACCOUNT_ID")
-SENDER_EMAIL = os.getenv("SENDER_EMAIL")
-SENDER_PASSWORD = os.getenv("SENDER_PASSWORD")
-SMTP_SERVER = os.getenv("SMTP_SERVER")
-SMTP_PORT = int(os.getenv("SMTP_PORT", 587))  # Changed from 465 to 587
-RECIPIENT_EMAIL = os.getenv("RECIPIENT_EMAIL")
 ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY")
 GPT_4O_API_KEY = os.getenv("OPENAI_API_KEY")
 FREESOUND_API_KEY = os.getenv("FREESOUND_API_KEY")
@@ -128,12 +124,6 @@ if missing_vars:
     logger.error(f"Missing required TikTok environment variables: {', '.join(missing_vars)}")
     raise ValueError(f"Missing required TikTok environment variables: {', '.join(missing_vars)}")
 
-def notify_reauthorization_required(service="Freesound"):
-    subject = f"{service} Reauthorization Required - Hetzner Social Automation"
-    body = f"The {service} token has expired and could not be refreshed automatically. Please run the script manually to reauthorize."
-    send_email(subject, body)
-    logger.critical(f"{service} reauthorization required. Notification sent.")
-
 def load_song_history():
     if not os.path.exists(SONG_HISTORY_FILE):
         return {}
@@ -160,6 +150,13 @@ def is_song_recently_used(song_id, song_history):
 def update_song_history(song_id, song_history):
     song_history[song_id] = datetime.now()
     save_song_history(song_history)
+
+def notify_reauthorization_required(service="TikTok"):
+    """Send notification when service reauthorization is required"""
+    subject = f"{service} Reauthorization Required - Hetzner Social Automation"
+    body = f"<p>The {service} token has expired and could not be refreshed automatically.</p><p>Please run the script manually to reauthorize.</p>"
+    send_email_notification(subject, body, is_error=True)
+    logger.critical(f"{service} reauthorization required. Notification sent.")
 
 def generate_image(prompt):
     try:
@@ -988,60 +985,38 @@ def create_video_with_center_image_and_music(image_path, text, logo_end_screen_p
        logger.error(f"An error occurred during video creation: {str(e)}")
        raise
 
-def send_email(subject: str, body: str):
-   if not all([SENDER_EMAIL, SENDER_PASSWORD, SMTP_SERVER, SMTP_PORT, RECIPIENT_EMAIL]):
-       logger.error("Email credentials or recipient email is missing. Please check your environment variables.")
-       return
+def send_email(facebook_status, instagram_status, twitter_status, tiktok_status):
+    """Send status email using the relay"""
+    timestamp_str = datetime.now().strftime("%y%m%d:%H%M%S")
 
-   try:
-       message = MIMEMultipart()
-       message['From'] = SENDER_EMAIL
-       message['To'] = RECIPIENT_EMAIL
-       message['Subject'] = f"Thorak Social Automation - Hetzner: {subject}"
+    # Count successful posts
+    successful_posts = sum([facebook_status, instagram_status, twitter_status, tiktok_status])
+    total_posts = 4
 
-       # Enhanced body with architecture info
-       enhanced_body = f"""Thorak Social Media Automation Report
-Source Server: Hetzner (5.161.70.26)
-Project: /opt/social-automation
+    # Create subject line (without prefixes - relay will add them)
+    if successful_posts == total_posts:
+        subject = f"Thorak Social Automation - Hetzner - All Successful - {timestamp_str}"
+    else:
+        subject = f"Thorak Social Automation - Hetzner - {total_posts - successful_posts} Failure(s) - {timestamp_str}"
 
-{body}
+    # Create email body with HTML formatting for line breaks
+    body = f"""<p><strong>Thorak Social Automation Report</strong></p>
+<p>Source Server: Hetzner (5.161.70.26)<br>
+Project: /opt/social-automation</p>
 
-Log file: {log_file_path}
-"""
-       message.attach(MIMEText(enhanced_body, 'plain'))
+<p><strong>Thorak Social Automation Posting Summary:</strong></p>
 
-       # Use STARTTLS on port 587 instead of SSL on port 465
-       with smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=30) as server:
-           server.starttls()  # Enable TLS encryption
-           server.login(SENDER_EMAIL, SENDER_PASSWORD)
-           server.send_message(message)
+<p>Facebook: {"Success" if facebook_status else "Failed"}<br>
+Instagram: {"Success" if instagram_status else "Failed"}<br>
+Twitter: {"Success" if twitter_status else "Failed"}<br>
+TikTok: {"Success" if tiktok_status else "Failed"}</p>
 
-       logger.info("Email notification sent successfully using SMTP.")
-   except Exception as e:
-       logger.error(f"Failed to send email notification: {str(e)}")
+<p>Please check the platforms for any failed postings.</p>
 
-def generate_email_summary(facebook_status, instagram_status, twitter_status, tiktok_status):
-   timestamp = datetime.now().strftime('%y%m%d:%H%M%S')
-
-   # Check the statuses
-   success_count = sum([facebook_status, instagram_status, twitter_status, tiktok_status])
-   total = 4  # Total number of platforms
-   failed_count = total - success_count
-
-   if failed_count == 0:
-       subject = f"Thorak Video Posted - All Successful - {timestamp}"
-   else:
-       subject = f"Thorak Video Posted - {failed_count} Failures - {timestamp}"
-
-   body = (
-       f"Thorak Video Posting Summary:\n\n"
-       f"Facebook: {'Success' if facebook_status else 'Failure'}\n"
-       f"Instagram: {'Success' if instagram_status else 'Failure'}\n"
-       f"Twitter: {'Success' if twitter_status else 'Failure'}\n"
-       f"TikTok: {'Success' if tiktok_status else 'Failure'}\n\n"
-       "Please check the platforms for any failed postings."
-   )
-   return subject, body
+<p>Log file: {log_file_path}</p>"""
+    
+    # Send email with is_error=False to avoid error prefixes
+    return send_email_notification(subject, body, is_error=False)
 
 def trim_to_full_sentence(text, max_length):
    sentences = re.split(r'(?<=[.!?]) +', text.strip())  # Split by sentence-ending punctuation
@@ -1852,8 +1827,7 @@ if __name__ == "__main__":
                    logger.error(f"Failed to delete temporary file {temp_file}: {str(e)}")
 
        # Generate email summary and send notification
-       subject, body = generate_email_summary(facebook_success, instagram_success, twitter_success, tiktok_success)
-       send_email(subject, body)
+       send_email(facebook_success, instagram_success, twitter_success, tiktok_success)
 
        total_time = time.time() - start_time
        logger.debug(f"Total execution time: {total_time:.2f} seconds")
