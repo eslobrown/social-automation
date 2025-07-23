@@ -857,12 +857,16 @@ def post_to_tiktok(video_path):
 # Function to send email notifications
 def send_email(subject: str, body: str):
     """Send status email using the relay"""
-    # Create email body with HTML formatting for line breaks
+    # Create email body with HTML formatting matching cave hacks script
     formatted_body = f"""<p><strong>Product Review Social Media Automation Report</strong></p>
 <p>Source Server: Hetzner (5.161.70.26)<br>
 Project: /opt/social-automation</p>
 
+<p><strong>Product Video Posting Summary:</strong></p>
+
 <p>{body}</p>
+
+<p>Please check the platforms for any failed postings.</p>
 
 <p>Log file: {log_file_path}</p>"""
     
@@ -1806,10 +1810,11 @@ Include an engaging call to action.\n\n"""
             subject = f"Product Video Posted - All Successful - {timestamp}"
         else:
             subject = f"Product Video Posted - {failed_count} Failed - {timestamp}"
-        body = "Product Video Posting Summary:\n\n"
+        body_lines = []
         for platform, status in posting_statuses.items():
-            body += f"{platform}: {status}\n"
-        body += "\nPlease check the platforms for any failed postings."
+            body_lines.append(f"{platform}: {status}")
+
+        body = "<br>".join(body_lines)
         send_email(subject, body)
 
     except ValueError as ve:
