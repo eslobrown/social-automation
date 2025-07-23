@@ -33,6 +33,7 @@ import pytz
 from fuzzywuzzy import fuzz
 import base64
 from dotenv import load_dotenv
+sys.path.insert(0, project_root)
 from email_relay import send_email_notification
 from PIL import Image, ImageFont, ImageDraw
 from requests_oauthlib import OAuth1, OAuth2Session
