@@ -1673,8 +1673,13 @@ def post_to_all_platforms_with_cleanup(video_path, formatted_caption, caption, s
 
     # TikTok posting (uses local file)
     logger.info("Posting to TikTok")
-    tiktok_success = post_to_tiktok(video_path)
-    print("Posted to TikTok!" if tiktok_success else "Failed to post to TikTok.")
+    try:
+        tiktok_success = post_to_tiktok(video_path)
+        print("Posted to TikTok!" if tiktok_success else "Failed to post to TikTok.")
+    except Exception as e:
+        logger.error(f"TikTok posting failed with exception: {str(e)}")
+        tiktok_success = False
+        print("Failed to post to TikTok.")
 
     # Wait a bit for platforms to download the video
     logger.info("Waiting 60 seconds for platforms to process video...")
