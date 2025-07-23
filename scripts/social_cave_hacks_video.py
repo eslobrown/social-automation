@@ -33,8 +33,6 @@ import pytz
 from fuzzywuzzy import fuzz
 import base64
 from dotenv import load_dotenv
-sys.path.insert(0, project_root)
-from email_relay import send_email_notification
 from PIL import Image, ImageFont, ImageDraw
 from requests_oauthlib import OAuth1, OAuth2Session
 import tempfile
@@ -65,6 +63,10 @@ import psutil
 # Set up project paths
 project_root = "/opt/social-automation"
 os.chdir(project_root)
+
+# Import email relay after project_root is defined
+sys.path.insert(0, project_root)
+from email_relay import send_email_notification
 
 # Load environment variables
 dotenv_path = os.path.join(project_root, "credentials.env")
