@@ -1809,6 +1809,9 @@ if __name__ == "__main__":
            FB_ACCESS_TOKEN
        )
 
+       # Debug logging to see what's actually being returned
+       logger.info(f"FINAL STATUS: Facebook={facebook_success}, Instagram={instagram_success}, Twitter={twitter_success}, TikTok={tiktok_success}")
+
    except ValueError as ve:
        logger.error(f"Validation error: {ve}")
    except Exception as e:
