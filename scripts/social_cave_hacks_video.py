@@ -33,9 +33,7 @@ import pytz
 from fuzzywuzzy import fuzz
 import base64
 from dotenv import load_dotenv
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
+from email_relay import send_email_notification
 from PIL import Image, ImageFont, ImageDraw
 from requests_oauthlib import OAuth1, OAuth2Session
 import tempfile
@@ -132,11 +130,6 @@ TWITTER_API_SECRET = os.getenv("TWITTER_API_SECRET")
 TWITTER_ACCESS_TOKEN = os.getenv("TWITTER_ACCESS_TOKEN")
 TWITTER_ACCESS_TOKEN_SECRET = os.getenv("TWITTER_ACCESS_TOKEN_SECRET")
 GOOGLE_SHEET_CSV_URL = os.getenv("GOOGLE_SHEET_CSV_URL")
-SENDER_EMAIL = os.getenv('SENDER_EMAIL')
-SENDER_PASSWORD = os.getenv('SENDER_PASSWORD')
-SMTP_SERVER = os.getenv('SMTP_SERVER')
-SMTP_PORT = int(os.getenv('SMTP_PORT', 587))  # Changed from 465 to 587
-RECIPIENT_EMAIL = os.getenv('RECIPIENT_EMAIL')
 ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY")
 FREESOUND_API_KEY = os.getenv("FREESOUND_API_KEY")
 SFTP_HOST = os.getenv("SFTP_HOST")
@@ -361,36 +354,8 @@ def update_song_history(song_id, song_history):
     save_song_history(song_history)
 
 def send_notification_email(subject, body):
-    if not all([SENDER_EMAIL, SENDER_PASSWORD, SMTP_SERVER, SMTP_PORT, RECIPIENT_EMAIL]):
-        logger.error("Email credentials or recipient email is missing. Please check your environment variables.")
-        return
-
-    try:
-        message = MIMEMultipart()
-        message['From'] = SENDER_EMAIL
-        message['To'] = RECIPIENT_EMAIL
-        message['Subject'] = f"Cave Hacks Social Automation - Hetzner: {subject}"
-
-        # Enhanced body with architecture info
-        enhanced_body = f"""Cave Hacks Social Media Automation Report
-Source Server: Hetzner (5.161.70.26)
-Project: /opt/social-automation
-
-{body}
-
-Log file: {log_file_path}
-"""
-        message.attach(MIMEText(enhanced_body, 'plain'))
-
-        # Use STARTTLS on port 587 instead of SSL on port 465
-        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=30) as server:
-            server.starttls()  # Enable TLS encryption
-            server.login(SENDER_EMAIL, SENDER_PASSWORD)
-            server.send_message(message)
-
-        logger.info("Email notification sent successfully using SMTP.")
-    except Exception as e:
-        logger.error(f"Failed to send email notification: {str(e)}")
+    """Send email notification using the relay"""
+    return send_email_notification(subject, body, is_error=True)
 
 def load_cave_hack_subjects():
     cave_hack_subjects = {}
@@ -1918,59 +1883,33 @@ def trim_to_full_sentence(text, max_length):
     return final_caption.strip()
 
 def send_email(facebook_status, instagram_status, twitter_status, tiktok_status):
-    if not all([SENDER_EMAIL, SENDER_PASSWORD, SMTP_SERVER, SMTP_PORT, RECIPIENT_EMAIL]):
-        logger.error("Email credentials or recipient email is missing. Please check your environment variables.")
-        return
+    """Send status email using the relay"""
+    timestamp_str = datetime.now().strftime("%y%m%d:%H%M%S")
 
-    try:
-        timestamp_str = datetime.now().strftime("%y%m%d:%H%M%S")
+    # Count successful posts
+    successful_posts = sum([facebook_status, instagram_status, twitter_status, tiktok_status])
+    total_posts = 4
 
-        # Count successful posts
-        successful_posts = sum([facebook_status, instagram_status, twitter_status, tiktok_status])
-        total_posts = 4
+    # Create subject line
+    if successful_posts == total_posts:
+        subject = f"Cave Hacks Video Posted - All Successful - {timestamp_str}"
+    else:
+        subject = f"Cave Hacks Video Posted - {total_posts - successful_posts} Failure(s) - {timestamp_str}"
 
-        # Create subject line
-        if successful_posts == total_posts:
-            subject = f"Cave Hacks Video Posted - All Successful - {timestamp_str}"
-        else:
-            subject = f"Cave Hacks Video Posted - {total_posts - successful_posts} Failure(s) - {timestamp_str}"
-
-        # Create email body
-        body = f"""Cave Hacks Video Posting Summary:
+    # Create email body
+    body = f"""Cave Hacks Video Posting Summary:
 
 Facebook: {"Success" if facebook_status else "Failed"}
 Instagram: {"Success" if instagram_status else "Failed"}
 Twitter: {"Success" if twitter_status else "Failed"}
 TikTok: {"Success" if tiktok_status else "Failed"}
 
-Please check the platforms for any failed postings.
-"""
-
-        message = MIMEMultipart()
-        message['From'] = SENDER_EMAIL
-        message['To'] = RECIPIENT_EMAIL
-        message['Subject'] = f"Cave Hacks Social Automation - Hetzner: {subject}"
-
-        # Enhanced body with architecture info
-        enhanced_body = f"""Cave Hacks Social Media Automation Report
+Log file: {log_file_path}
 Source Server: Hetzner (5.161.70.26)
 Project: /opt/social-automation
-
-{body}
-
-Log file: {log_file_path}
 """
-        message.attach(MIMEText(enhanced_body, 'plain'))
-
-        # Use STARTTLS on port 587 instead of SSL on port 465
-        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=30) as server:
-            server.starttls()  # Enable TLS encryption
-            server.login(SENDER_EMAIL, SENDER_PASSWORD)
-            server.send_message(message)
-
-        logger.info("Email notification sent successfully using SMTP.")
-    except Exception as e:
-        logger.error(f"Failed to send email notification: {str(e)}")
+    
+    return send_email_notification(subject, body)
 
 def log_memory_usage(tag=""):
     process = psutil.Process(os.getpid())
@@ -2113,7 +2052,7 @@ if __name__ == "__main__":
         logger.error(traceback.format_exc())
         subject = f"Cave Hacks Video Script Failed - {timestamp_str}"
         error_message = f"An error occurred: {str(e)}\n\nTraceback:\n{traceback.format_exc()}"
-        send_email(False, False, False, False)  # Assuming failure for all platforms
+        send_email_notification(f"Cave Hacks Video Script Failed - {timestamp_str}", error_message, is_error=True)
 
     finally:
         # Clean up temporary files
